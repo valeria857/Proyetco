@@ -5,6 +5,7 @@ export const CONFIG = {
   FAMILIAS_MAXIMAS: 3, // familias por zona
   AGUA_MINIMA_INICIAL: 0, // unidades de agua por zona
   AGUA_MAXIMA_INICIAL: 3, // unidades de agua por zona
+  AGUA_EN_RIESGO: 3, // unidades de agua a partir de las que una zona está en riesgo
   NIVEL_INUNDACION: 6, // unidades de agua por zona
   DRENAJE_ZONA: 3, // unidades de agua que baja en la zona elegida
   DRENAJE_VECINAS: 1, // unidades de agua que baja en cada zona vecina
@@ -28,6 +29,8 @@ export type Zona = {
   inundada: boolean
   evacuada: boolean
 }
+
+export type EstadoZona = 'estable' | 'en riesgo' | 'crítica' | 'inundada' | 'evacuada'
 
 export type Estado = {
   zonas: Zona[]
@@ -92,6 +95,20 @@ export function crearPartida(semilla: number): Estado {
   }
 }
 
+export function obtenerEstadoZona(zona: Zona): EstadoZona {
+  if (zona.inundada) return 'inundada'
+  if (zona.evacuada) return 'evacuada'
+  if (zona.agua >= CONFIG.NIVEL_INUNDACION - 1) return 'crítica'
+  if (zona.agua >= CONFIG.AGUA_EN_RIESGO) return 'en riesgo'
+  return 'estable'
+}
+
+export function obtenerZonasQueSeInundaran(estado: Estado): Zona[] {
+  return estado.zonas.filter(
+    (zona) => !zona.inundada && zona.agua + lluviaDeZona(zona) >= CONFIG.NIVEL_INUNDACION,
+  )
+}
+
 export function avisar(estado: Estado, idZona: number): boolean {
   const zona = estado.zonas.find((elemento) => elemento.id === idZona)
   if (!puedeActuar(estado) || !zona || zona.inundada || zona.evacuada) return false
@@ -127,7 +144,7 @@ export function finalizarTurno(estado: Estado): boolean {
   ) return false
 
   for (const zona of estado.zonas) {
-    zona.agua += zona.fila === CONFIG.FILAS - 1 ? CONFIG.LLUVIA_QUEBRADA : CONFIG.LLUVIA_NORMAL
+    zona.agua += lluviaDeZona(zona)
 
     if (!zona.inundada && zona.agua >= CONFIG.NIVEL_INUNDACION) {
       zona.inundada = true
@@ -180,4 +197,8 @@ function familiasNecesarias(estado: Estado): number {
   return Math.ceil(
     (estado.familiasTotales * CONFIG.PORCENTAJE_META) / CONFIG.UNIDADES_PORCENTUALES,
   )
+}
+
+function lluviaDeZona(zona: Zona): number {
+  return zona.fila === CONFIG.FILAS - 1 ? CONFIG.LLUVIA_QUEBRADA : CONFIG.LLUVIA_NORMAL
 }

@@ -10,17 +10,10 @@
   font-weight: 400;
 
   --ink: #1d3230;
-  --muted: #788783;
-  --muted-dark: #5c6b68;
-  --line: #e6ece9;
   --paper: #fff;
   --canvas: #f4f7f6;
   --green: #147d6e;
   --green-dark: #0c5e52;
-  --green-light: #e8f5f1;
-  --orange: #cc7b34;
-  --red: #cc615b;
-  --navy: #243c42;
   --heading-font: "Manrope", "Segoe UI", sans-serif;
 }
 
@@ -274,7 +267,7 @@ p {
   transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled):not([aria-disabled="true"]) {
   transform: translateY(-1px);
 }
 
@@ -787,12 +780,12 @@ p {
   white-space: nowrap;
 }
 
-.button-finish-turn:hover:not(:disabled) {
+.button-finish-turn:hover:not([aria-disabled="true"]) {
   background: var(--green-dark);
   box-shadow: 0 6px 15px rgba(20, 125, 110, 0.18);
 }
 
-.button-finish-turn:disabled {
+.button-finish-turn[aria-disabled="true"] {
   background: #e8efec;
   color: #9ba9a4;
   cursor: not-allowed;
@@ -921,13 +914,11 @@ p {
 .zone-calm {
   --zone-accent: #398d70;
   --meter-color: #58a985;
-  --zone-tint: #eff8f3;
 }
 
 .zone-warning {
   --zone-accent: #b77a31;
   --meter-color: #dfa64c;
-  --zone-tint: #fff9ef;
   border-color: #f1e4ce;
   background: #fffdfa;
 }
@@ -935,7 +926,6 @@ p {
 .zone-critical {
   --zone-accent: #bd5e51;
   --meter-color: #d77762;
-  --zone-tint: #fff5f1;
   border-color: #f0d8d1;
   background: #fffaf8;
 }
@@ -943,7 +933,6 @@ p {
 .zone-flooded {
   --zone-accent: #4b7780;
   --meter-color: #5f9ca3;
-  --zone-tint: #edf5f6;
   border-color: #d9e7e9;
   background: #f6fafb;
 }
@@ -951,7 +940,6 @@ p {
 .zone-safe {
   --zone-accent: #398d70;
   --meter-color: #56a989;
-  --zone-tint: #edf8f2;
   border-color: #d5e9dc;
   background: #f7fbf8;
 }
@@ -1066,7 +1054,7 @@ p {
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
-.zone-action:hover:not(:disabled) {
+.zone-action:hover:not([aria-disabled="true"]) {
   border-color: #77ad98;
   background: #edf7f2;
   color: #1b755f;
@@ -1078,12 +1066,12 @@ p {
   color: #347c5c;
 }
 
-.action-evacuate:hover:not(:disabled) {
+.action-evacuate:hover:not([aria-disabled="true"]) {
   border-color: #6fa985;
   background: #e2f2e8;
 }
 
-.zone-action:disabled {
+.zone-action[aria-disabled="true"] {
   border-color: #edf0ee;
   background: #f4f6f5;
   color: #b0bab6;
@@ -1793,8 +1781,9 @@ p {
   }
 
   .zone-action {
-    height: 22px;
-    font-size: 7px;
+    min-height: 24px;
+    height: 24px;
+    font-size: 8px;
   }
 
   .board-footnote {

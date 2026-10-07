@@ -7,7 +7,16 @@ import {
   finalizarTurno,
   obtenerResumen,
   type Estado,
+  type Zona,
 } from "../src/juego";
+
+function buscarZona(estado: Estado, fila: number, columna: number): Zona {
+  const zona = estado.zonas.find(
+    (elemento) => elemento.fila === fila && elemento.columna === columna,
+  );
+  if (!zona) throw new Error(`No se encontró la zona en fila ${fila}, columna ${columna}.`);
+  return zona;
+}
 
 function comprobarFamiliasConstantes(estado: Estado) {
   expect(estado.zonas.reduce((total, zona) => total + zona.familias, 0)).toBe(
@@ -103,9 +112,9 @@ describe("avisar", () => {
 describe("drenar", () => {
   it("reduce el agua de la zona y sus vecinas y consume una acción", () => {
     const estado = crearPartida(4);
-    const centro = estado.zonas.find((zona) => zona.fila === 2 && zona.columna === 2)!;
-    const vecina = estado.zonas.find((zona) => zona.fila === 2 && zona.columna === 3)!;
-    const lejana = estado.zonas.find((zona) => zona.fila === 0 && zona.columna === 0)!;
+    const centro = buscarZona(estado, 2, 2);
+    const vecina = buscarZona(estado, 2, 3);
+    const lejana = buscarZona(estado, 0, 0);
     centro.agua = 3;
     vecina.agua = 2;
     lejana.agua = 2;
@@ -157,8 +166,8 @@ describe("finalizarTurno", () => {
   it("aplica la lluvia, registra las pérdidas y prepara el turno siguiente", () => {
     const estado = crearPartida(8);
     estado.accionesRestantes = 0;
-    const zonaNormal = estado.zonas.find((zona) => zona.fila === 0)!;
-    const zonaQuebrada = estado.zonas.find((zona) => zona.fila === CONFIG.FILAS - 1)!;
+    const zonaNormal = buscarZona(estado, 0, 0);
+    const zonaQuebrada = buscarZona(estado, CONFIG.FILAS - 1, 0);
     zonaNormal.agua = 0;
     zonaQuebrada.agua = 0;
 
@@ -205,6 +214,27 @@ describe("resultado de la partida", () => {
     expect(finalizarTurno(estado)).toBe(true);
     expect(estado.resultado).toBe("perdida");
     expect(estado.accionesRestantes).toBe(0);
+  });
+
+  it("pierde al llegar al último turno sin alcanzar la meta", () => {
+    const estado = crearPartida(14);
+    estado.turno = CONFIG.TURNOS_MAXIMOS;
+    estado.accionesRestantes = 0;
+
+    expect(finalizarTurno(estado)).toBe(true);
+    expect(estado.resultado).toBe("perdida");
+  });
+
+  it("permite finalizar con acciones restantes cuando todas las zonas están inundadas", () => {
+    const estado = crearPartida(15);
+    estado.accionesRestantes = 1;
+    estado.zonas.forEach((zona) => {
+      zona.inundada = true;
+    });
+    estado.familiasPerdidas = estado.familiasTotales;
+
+    expect(finalizarTurno(estado)).toBe(true);
+    expect(estado.resultado).toBe("perdida");
   });
 
   it("muestra el resumen con las familias en riesgo y el porcentaje salvado", () => {

@@ -5,7 +5,10 @@ import {
   crearPartida,
   drenar,
   finalizarTurno,
+  obtenerEstadoZona,
   obtenerResumen,
+  obtenerZonasQueSeInundaran,
+  type EstadoZona,
   type Estado,
   type Zona,
 } from "./juego";
@@ -17,6 +20,9 @@ function obtenerContenedor(): HTMLDivElement {
 }
 
 const app = obtenerContenedor();
+
+const LIMITE_MENSAJES_REGISTRO = 30;
+const NIVELES_VISUALES = 5;
 
 let estado: Estado | null = null;
 let semillaActual = 0;
@@ -42,24 +48,24 @@ function iniciarPartida(semilla: number) {
 }
 
 function agregarMensaje(mensaje: string) {
-  mensajes = [...mensajes, mensaje].slice(-30);
+  mensajes = [...mensajes, mensaje].slice(-LIMITE_MENSAJES_REGISTRO);
 }
 
 function renderizarInicio(error = "") {
   app.innerHTML = `
     <main class="welcome-screen">
       <header class="site-header welcome-header">
-        <a class="brand" href="#" aria-label="Tormenta, inicio">
+        <div class="brand">
           ${marca}
           <span>tormenta<span class="brand-period">.</span></span>
-        </a>
+        </div>
         <span class="header-note"><span class="live-dot"></span> Centro de respuesta climática</span>
       </header>
 
       <section class="welcome-content" aria-labelledby="welcome-title">
         <div class="welcome-copy">
           <p class="eyebrow"><span class="eyebrow-line"></span> Simulación de emergencia</p>
-          <h1 id="welcome-title">Cada decisión<br />puede <em>salvar vidas.</em></h1>
+          <h1 id="welcome-title" tabindex="-1">Cada decisión<br />puede <em>salvar vidas.</em></h1>
           <p class="welcome-description">
             La tormenta avanza y el agua sube. Organiza la evacuación, drena las zonas críticas
             y protege a la mayor cantidad de familias posible.
@@ -76,7 +82,7 @@ function renderizarInicio(error = "") {
                 placeholder="Dejar vacío para generar una"
                 autocomplete="off"
               />
-              <button class="button button-primary start-button" type="submit">
+              <button class="button button-primary start-button" type="submit" aria-label="Iniciar partida con la semilla ingresada o generar una nueva. Disponible.">
                 Iniciar partida <span aria-hidden="true">↗</span>
               </button>
             </div>
@@ -99,8 +105,8 @@ function renderizarInicio(error = "") {
           <div class="visual-rain rain-two"></div>
           <div class="visual-rain rain-three"></div>
           <div class="visual-grid">
-            ${Array.from({ length: 25 }, (_, index) => {
-              const level = (index * 7 + Math.floor(index / 5) * 3) % 5;
+            ${Array.from({ length: CONFIG.FILAS * CONFIG.COLUMNAS }, (_, index) => {
+              const level = index % NIVELES_VISUALES;
               return `<span class="visual-cell level-${level}"></span>`;
             }).join("")}
           </div>
@@ -120,33 +126,64 @@ function renderizarInicio(error = "") {
     </main>`;
 }
 
-function claseRiesgo(zona: Zona): string {
-  if (zona.inundada) return "zone-flooded";
-  if (zona.evacuada) return "zone-safe";
-  if (zona.agua >= CONFIG.NIVEL_INUNDACION - 1) return "zone-critical";
-  if (zona.agua >= 3) return "zone-warning";
-  return "zone-calm";
+function claseRiesgo(estadoZona: EstadoZona): string {
+  switch (estadoZona) {
+    case "inundada":
+      return "zone-flooded";
+    case "evacuada":
+      return "zone-safe";
+    case "crítica":
+      return "zone-critical";
+    case "en riesgo":
+      return "zone-warning";
+    case "estable":
+      return "zone-calm";
+  }
 }
 
-function etiquetaRiesgo(zona: Zona): string {
-  if (zona.inundada) return "Inundada";
-  if (zona.evacuada) return "Evacuada";
-  if (zona.agua >= CONFIG.NIVEL_INUNDACION - 1) return "Crítica";
-  if (zona.agua >= 3) return "En riesgo";
-  return "Estable";
+function etiquetaRiesgo(estadoZona: EstadoZona): string {
+  switch (estadoZona) {
+    case "inundada":
+      return "Inundada";
+    case "evacuada":
+      return "Evacuada";
+    case "crítica":
+      return "Crítica";
+    case "en riesgo":
+      return "En riesgo";
+    case "estable":
+      return "Estable";
+  }
 }
 
 function renderizarZona(zona: Zona): string {
-  const deshabilitadas = estado?.resultado !== "en curso" || estado.accionesRestantes <= 0;
-  const bloqueadaPorAgua = zona.inundada;
-  const yaEvacuada = zona.evacuada;
-  const porcentajeAgua = Math.min((zona.agua / CONFIG.NIVEL_INUNDACION) * 100, 100);
+  const sinAcciones = estado?.resultado !== "en curso" || estado.accionesRestantes <= 0;
+  const porcentajeAgua = Math.min(
+    (zona.agua / CONFIG.NIVEL_INUNDACION) * CONFIG.UNIDADES_PORCENTUALES,
+    CONFIG.UNIDADES_PORCENTUALES,
+  );
+  const estadoZona = obtenerEstadoZona(zona);
+  const claseEstadoZona = claseRiesgo(estadoZona);
+  const etiquetaEstadoZona = etiquetaRiesgo(estadoZona);
+  const contextoZona = `Nivel de agua: ${zona.agua} de ${CONFIG.NIVEL_INUNDACION}. ${zona.familias} ${zona.familias === 1 ? "familia" : "familias"}. Estado: ${estadoZona}.`;
+  const motivoDrenaje = zona.inundada
+    ? "no disponible porque la zona está inundada"
+    : sinAcciones
+      ? "no disponible porque no quedan acciones"
+      : "disponible";
+  const motivoEvacuacion = zona.inundada
+    ? "no disponible porque la zona está inundada"
+    : zona.evacuada
+      ? "no disponible porque ya fue evacuada"
+      : sinAcciones
+        ? "no disponible porque no quedan acciones"
+        : "disponible";
 
   return `
-    <article class="zone-card ${claseRiesgo(zona)}" aria-label="Zona ${zona.id + 1}, ${etiquetaRiesgo(zona)}">
+    <article class="zone-card ${claseEstadoZona}" aria-label="Zona ${zona.id + 1}. ${contextoZona}">
       <div class="zone-card-top">
         <span class="zone-name">ZONA ${String(zona.id + 1).padStart(2, "0")}</span>
-        <span class="zone-status"><span class="status-dot"></span>${etiquetaRiesgo(zona)}</span>
+        <span class="zone-status"><span class="status-dot" aria-hidden="true"></span>${etiquetaEstadoZona}</span>
       </div>
       <div class="water-readout">
         <strong>${zona.agua}</strong>
@@ -155,10 +192,11 @@ function renderizarZona(zona: Zona): string {
       <div
         class="water-meter"
         role="meter"
-        aria-label="Nivel de agua"
+        aria-label="Nivel de agua de zona ${zona.id + 1}"
         aria-valuemin="0"
         aria-valuemax="${CONFIG.NIVEL_INUNDACION}"
         aria-valuenow="${zona.agua}"
+        aria-valuetext="${zona.agua} de ${CONFIG.NIVEL_INUNDACION} unidades de agua. Estado: ${etiquetaEstadoZona}."
       ><span style="width: ${porcentajeAgua}%"></span></div>
       <div class="family-readout">
         <span class="family-icon" aria-hidden="true">♧</span>
@@ -170,16 +208,16 @@ function renderizarZona(zona: Zona): string {
           type="button"
           data-action="drain"
           data-zone-id="${zona.id}"
-          aria-label="Drenar zona ${zona.id + 1}"
-          ${deshabilitadas || bloqueadaPorAgua ? "disabled" : ""}
+          aria-label="Drenar zona ${zona.id + 1}. Nivel de agua: ${zona.agua} de ${CONFIG.NIVEL_INUNDACION}. ${zona.familias} ${zona.familias === 1 ? "familia" : "familias"}. Estado: ${etiquetaEstadoZona}. Acción ${motivoDrenaje}."
+          aria-disabled="${zona.inundada || sinAcciones}"
         >Drenar</button>
         <button
           class="zone-action action-evacuate"
           type="button"
           data-action="evacuate"
           data-zone-id="${zona.id}"
-          aria-label="Evacuar zona ${zona.id + 1}"
-          ${deshabilitadas || bloqueadaPorAgua || yaEvacuada ? "disabled" : ""}
+          aria-label="Evacuar zona ${zona.id + 1}. Nivel de agua: ${zona.agua} de ${CONFIG.NIVEL_INUNDACION}. ${zona.familias} ${zona.familias === 1 ? "familia" : "familias"}. Estado: ${etiquetaEstadoZona}. Acción ${motivoEvacuacion}."
+          aria-disabled="${zona.inundada || zona.evacuada || sinAcciones}"
         >Evacuar</button>
       </div>
     </article>`;
@@ -209,7 +247,7 @@ function renderizarRegistro(): string {
 function renderizarPartida() {
   if (!estado) return renderizarInicio();
   const resumen = obtenerResumen(estado);
-  const progreso = Math.min(resumen.porcentajeSalvado, 100);
+  const progreso = Math.min(resumen.porcentajeSalvado, CONFIG.UNIDADES_PORCENTUALES);
   const turnosRestantes = CONFIG.TURNOS_MAXIMOS - estado.turno + 1;
   const habilitarFin = estado.resultado === "en curso"
     && (estado.accionesRestantes === 0 || estado.zonas.every((zona) => zona.inundada));
@@ -217,22 +255,22 @@ function renderizarPartida() {
   app.innerHTML = `
     <div class="game-shell">
       <header class="site-header game-header">
-        <a class="brand" href="#" aria-label="Tormenta">
+        <div class="brand">
           ${marca}
           <span>tormenta<span class="brand-period">.</span></span>
-        </a>
+        </div>
         <div class="mission-label"><span class="live-dot"></span> Operación activa <span class="mission-separator">/</span> Semilla ${semillaActual}</div>
-        <button class="text-button" type="button" data-action="exit">Salir de la partida <span aria-hidden="true">↗</span></button>
+        <button class="text-button" type="button" data-action="exit" aria-label="Salir de la partida y volver al inicio. Disponible.">Salir de la partida <span aria-hidden="true">↗</span></button>
       </header>
 
       <main class="game-main">
         <section class="mission-heading">
           <div>
             <p class="eyebrow"><span class="eyebrow-line"></span> Centro de operaciones</p>
-            <h1>Protege a la comunidad<span class="heading-period">.</span></h1>
+            <h1 tabindex="-1">Protege a la comunidad<span class="heading-period">.</span></h1>
             <p class="mission-subtitle">Gestiona tus recursos antes de que la crecida avance.</p>
           </div>
-          <div class="turn-pill"><span class="turn-pulse"></span> Turno ${estado.turno} <span>/ ${CONFIG.TURNOS_MAXIMOS}</span></div>
+          <div class="turn-pill" role="status" aria-live="polite" aria-label="Turno ${estado.turno} de ${CONFIG.TURNOS_MAXIMOS}"><span class="turn-pulse" aria-hidden="true"></span> Turno ${estado.turno} <span>/ ${CONFIG.TURNOS_MAXIMOS}</span></div>
         </section>
 
         <section class="status-strip" aria-label="Estado general">
@@ -241,7 +279,7 @@ function renderizarPartida() {
             <div class="stat-copy"><span class="stat-label">TURNO ACTUAL</span><strong>${String(estado.turno).padStart(2, "0")} <small>/ ${String(CONFIG.TURNOS_MAXIMOS).padStart(2, "0")}</small></strong></div>
             <span class="stat-note">${turnosRestantes} ${turnosRestantes === 1 ? "turno" : "turnos"} restantes</span>
           </article>
-          <article class="status-card action-stat">
+          <article class="status-card action-stat" role="status" aria-live="polite">
             <span class="stat-icon icon-action" aria-hidden="true">✳</span>
             <div class="stat-copy"><span class="stat-label">ACCIONES</span><strong>${estado.accionesRestantes} <small>/ ${CONFIG.ACCIONES_POR_TURNO}</small></strong></div>
             <span class="stat-note">${estado.accionesRestantes === 1 ? "acción disponible" : "acciones disponibles"}</span>
@@ -249,14 +287,15 @@ function renderizarPartida() {
           <article class="status-card rescue-stat">
             <span class="stat-icon icon-rescue" aria-hidden="true">♥</span>
             <div class="stat-copy"><span class="stat-label">FAMILIAS A SALVO</span><strong>${Math.round(resumen.porcentajeSalvado)}<small>% <span class="stat-goal">/ ${resumen.porcentajeMeta}% meta</span></small></strong></div>
-            <div class="progress-track" role="progressbar" aria-label="Porcentaje de familias a salvo" aria-valuemin="0" aria-valuemax="${resumen.porcentajeMeta}" aria-valuenow="${Math.min(Math.round(resumen.porcentajeSalvado), resumen.porcentajeMeta)}"><span style="width: ${progreso}%"></span><i style="left: ${resumen.porcentajeMeta}%"></i></div>
+            <div class="progress-track" role="progressbar" aria-label="Porcentaje de familias a salvo, meta ${resumen.porcentajeMeta} por ciento" aria-valuemin="0" aria-valuemax="${resumen.porcentajeMeta}" aria-valuenow="${Math.min(Math.round(resumen.porcentajeSalvado), resumen.porcentajeMeta)}"><span style="width: ${progreso}%"></span><i style="left: ${resumen.porcentajeMeta}%"></i></div>
           </article>
           <button
             class="button button-finish-turn"
             type="button"
             data-action="finish-turn"
-            ${habilitarFin ? "" : "disabled"}
-            title="${habilitarFin ? "Avanzar la tormenta al siguiente turno" : "Usa todas tus acciones para finalizar el turno"}"
+            aria-label="Finalizar turno ${estado.turno} de ${CONFIG.TURNOS_MAXIMOS}. ${habilitarFin ? "Disponible." : `No disponible: quedan ${estado.accionesRestantes} acciones.`}"
+            aria-disabled="${!habilitarFin}"
+            title="${habilitarFin ? "Avanzar la tormenta al siguiente turno" : `No disponible: quedan ${estado.accionesRestantes} acciones`}"
           >
             <span class="finish-icon" aria-hidden="true">↗</span>
             <span>Finalizar turno</span>
@@ -277,7 +316,7 @@ function renderizarPartida() {
               </div>
             </div>
             <div class="board-coordinates"><span>N ↑</span><span>QUEBRADA AL SUR <i aria-hidden="true">⌄</i></span></div>
-            <div class="game-board" role="grid" aria-label="Tablero de 5 por 5 zonas">
+            <div class="game-board" role="group" aria-label="Tablero de 5 filas por 5 columnas. Cada zona incluye acciones para drenar o evacuar.">
               ${estado.zonas.map((zona) => renderizarZona(zona)).join("")}
             </div>
             <div class="board-footnote"><span class="footnote-icon">i</span> Drenar reduce el agua de la zona y sus vecinas. Evacuar pone a salvo a todas las familias de una zona.</div>
@@ -306,16 +345,16 @@ function renderizarFinal() {
   app.innerHTML = `
     <main class="finish-screen ${victoria ? "finish-victory" : "finish-defeat"}">
       <header class="site-header finish-header">
-        <a class="brand" href="#" aria-label="Tormenta">
+        <div class="brand">
           ${marca}
           <span>tormenta<span class="brand-period">.</span></span>
-        </a>
+        </div>
         <span class="header-note"><span class="live-dot"></span> Informe de misión</span>
       </header>
       <section class="finish-content">
         <div class="finish-emblem" aria-hidden="true">${victoria ? "✓" : "!"}</div>
         <p class="eyebrow"><span class="eyebrow-line"></span> Operación finalizada</p>
-        <h1>${victoria ? "La comunidad está a salvo." : "La crecida nos ganó."}</h1>
+        <h1 tabindex="-1">${victoria ? "Victoria: la comunidad está a salvo." : "Derrota: la crecida nos ganó."}</h1>
         <p class="finish-description">${victoria
           ? `Gracias a tu respuesta, salvaste a ${estado.familiasSalvas} de ${estado.familiasTotales} familias.`
           : `Se salvaron ${estado.familiasSalvas} de ${estado.familiasTotales} familias. La misión terminó antes de alcanzar la meta.`
@@ -327,8 +366,8 @@ function renderizarFinal() {
           <div><span>TURNO FINAL</span><strong>${estado.turno}<small> / ${CONFIG.TURNOS_MAXIMOS}</small></strong></div>
         </div>
         <div class="finish-actions">
-          <button class="button button-primary" type="button" data-action="restart">Reiniciar partida <span aria-hidden="true">↻</span></button>
-          <button class="button button-secondary" type="button" data-action="home">Cambiar escenario</button>
+          <button class="button button-primary" type="button" data-action="restart" aria-label="Reiniciar la misma partida con la semilla ${semillaActual}. Disponible.">Reiniciar partida <span aria-hidden="true">↻</span></button>
+          <button class="button button-secondary" type="button" data-action="home" aria-label="Cambiar escenario y volver al inicio. Disponible.">Cambiar escenario</button>
         </div>
         <p class="finish-seed">Escenario <span>#${semillaActual}</span></p>
       </section>
@@ -336,6 +375,14 @@ function renderizarFinal() {
 }
 
 function renderizar() {
+  const elementoActivo = document.activeElement;
+  const accionActiva = elementoActivo instanceof HTMLButtonElement
+    ? elementoActivo.dataset.action
+    : undefined;
+  const zonaActiva = elementoActivo instanceof HTMLButtonElement
+    ? elementoActivo.dataset.zoneId
+    : undefined;
+
   if (!estado) {
     renderizarInicio();
   } else if (estado.resultado !== "en curso") {
@@ -343,12 +390,18 @@ function renderizar() {
   } else {
     renderizarPartida();
   }
+
+  const accionParaRestaurar = accionActiva
+    ? Array.from(app.querySelectorAll<HTMLButtonElement>("button[data-action]"))
+      .find((boton) => boton.dataset.action === accionActiva && boton.dataset.zoneId === zonaActiva)
+    : undefined;
+  (accionParaRestaurar ?? app.querySelector<HTMLElement>("h1[tabindex='-1']"))?.focus();
 }
 
 function procesarAccion(action: string, zoneId?: number) {
   if (action === "exit" || action === "home") {
     estado = null;
-    renderizarInicio();
+    renderizar();
     return;
   }
 
@@ -366,7 +419,7 @@ function procesarAccion(action: string, zoneId?: number) {
       ? `Drenaje completado en la zona ${zoneId + 1}. El nivel también baja en las zonas vecinas.`
       : `No fue posible drenar la zona ${zoneId + 1}.`);
     if (valido && zona) agregarMensaje(`Quedan ${estado.accionesRestantes} ${estado.accionesRestantes === 1 ? "acción" : "acciones"} este turno.`);
-    renderizarPartida();
+    renderizar();
     return;
   }
 
@@ -378,15 +431,12 @@ function procesarAccion(action: string, zoneId?: number) {
       ? `Evacuación completada en la zona ${zoneId + 1}: ${cantidadFamilias} ${cantidadFamilias === 1 ? "familia está" : "familias están"} a salvo.`
       : `No fue posible evacuar la zona ${zoneId + 1}.`);
     if (valido) agregarMensaje(`Quedan ${estado.accionesRestantes} ${estado.accionesRestantes === 1 ? "acción" : "acciones"} este turno.`);
-    renderizarPartida();
+    renderizar();
     return;
   }
 
   if (action === "finish-turn") {
-    const zonasQueSeInundaran = estado.zonas
-      .filter((zona) => !zona.inundada && zona.agua + (zona.fila === CONFIG.FILAS - 1
-        ? CONFIG.LLUVIA_QUEBRADA
-        : CONFIG.LLUVIA_NORMAL) >= CONFIG.NIVEL_INUNDACION)
+    const zonasQueSeInundaran = obtenerZonasQueSeInundaran(estado)
       .map((zona) => zona.id + 1);
     const turnoFinalizado = finalizarTurno(estado);
 
@@ -416,6 +466,7 @@ app.addEventListener("submit", (event) => {
 
   if (!Number.isSafeInteger(semilla)) {
     renderizarInicio("Ingresa una semilla entera válida.");
+    app.querySelector<HTMLInputElement>("#seed")?.focus();
     return;
   }
 
@@ -426,7 +477,7 @@ app.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
   const button = target.closest<HTMLButtonElement>("button[data-action]");
-  if (!button || button.disabled) return;
+  if (!button || button.getAttribute("aria-disabled") === "true") return;
   const zoneId = button.dataset.zoneId === undefined ? undefined : Number(button.dataset.zoneId);
   procesarAccion(button.dataset.action ?? "", zoneId);
 });
